@@ -6,12 +6,16 @@ Para que el chatbot funcione de forma 100% gratuita, necesitas conectar este có
 1. Abre tu terminal y asegúrate de tener instalado `firebase-tools` (`npm install -g firebase-tools`).
 2. Inicia sesión en Firebase: `firebase login`.
 3. Selecciona tu proyecto en el archivo `.firebaserc` (cambia `"tu-proyecto-firebase"` por el ID de tu proyecto en la consola de Firebase).
-4. Dentro de la carpeta `functions/`, ejecuta:
+4. Dentro de la carpeta `functions/`, primero instala las dependencias ejecutando:
+   ```bash
+   npm install
+   ```
+5. Después, en la misma carpeta `functions/`, compila y sube el código:
    ```bash
    npm run build
    firebase deploy --only functions
    ```
-5. Firebase te dará una URL (por ejemplo: `https://us-central1-tu-proyecto.cloudfunctions.net/chatbot`). Guarda esta URL, la necesitaremos luego.
+6. Firebase te dará una URL (por ejemplo: `https://us-central1-tu-proyecto.cloudfunctions.net/chatbot`). Guarda esta URL, la necesitaremos luego.
 
 ## PASO 2: Crear la App en Meta for Developers
 1. Ve a [Meta for Developers](https://developers.facebook.com/) e inicia sesión con tu cuenta de Facebook.
