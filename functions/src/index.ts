@@ -11,8 +11,6 @@ app.use(express.json());
 // Variables de entorno de Firebase o configurables manualmente
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || "mi_super_token_secreto_123";
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN || "TU_PAGE_ACCESS_TOKEN";
-const WA_PHONE_NUMBER_ID = process.env.WA_PHONE_NUMBER_ID || "TU_WA_PHONE_NUMBER_ID";
-const WA_ACCESS_TOKEN = process.env.WA_ACCESS_TOKEN || "TU_WA_ACCESS_TOKEN";
 const OWNER_WHATSAPP_NUMBER = process.env.OWNER_WHATSAPP_NUMBER || "TU_NUMERO_WHATSAPP_CON_CODIGO_PAIS";
 
 // Endpoint de verificación (necesario para que Meta valide el Webhook)
@@ -65,12 +63,14 @@ async function handleMessage(senderPsid: string, receivedMessage: any) {
     }
     // Opción 1: Hacer un pedido
     else if (msg === "1" || msg.includes("comprar") || msg.includes("pedido")) {
-      responseText = "¡Excelente! Para registrar tu pedido, envíame en un solo mensaje la palabra *Confirmar* seguida del perfume que deseas y la opción de entrega de tu preferencia:\n\n🔹 *Opción A:* Entregas en la Católica (Lunes a Viernes a las 14:15 PM).\n🔹 *Opción B:* Entregas en el Correo (Solo Sábados de 18:00 a 19:30 PM).\n\nEjemplo: Confirmar: Perfume Bleu de Chanel, Opción A y mi número es 77712345.";
+      responseText = "¡Excelente! Para registrar tu pedido, envíame en un solo mensaje la palabra *Confirmar* seguida del perfume que deseas y la opción de entrega de tu preferencia:\n\n🔹 *Opción A:* Entregas en la Católica (Lunes a Viernes a las 14:15 PM).\n🔹 *Opción B:* Entregas en el Correo (Solo Sábados de 18:00 a 19:30 PM).\n🔹 *Opción C:* Recoger en sucursal.\n\nEjemplo: Confirmar: Perfume Bleu de Chanel, Opción C y mi número es 77712345.";
     }
-    // Flujo Venta / Confirmar pedido
+    // Flujo Venta / Confirmar pedido - CON LINK DE WHATSAPP DIRECTO
     else if (msg.includes("confirmar")) {
-      responseText = "¡Pedido recibido! Tu solicitud ha sido agendada con éxito. El detalle de tu pedido ha sido enviado a nuestro equipo y te contactaremos para entregarlo. ¡Gracias por tu compra!";
-      await sendWhatsAppNotification(`📦 NUEVO PEDIDO REGISTRADO 📦\n\nDetalle del cliente:\n"${receivedMessage.text}"\n\nPerfil en Messenger (PSID): ${senderPsid}\n(Recuerda verificar la opción de entrega seleccionada por el cliente).`);
+      const encodedMessage = encodeURIComponent(`Hola, vengo de la página de Facebook. Este es mi pedido:\n\n${receivedMessage.text}`);
+      const whatsappLink = `https://wa.me/${OWNER_WHATSAPP_NUMBER}?text=${encodedMessage}`;
+
+      responseText = `¡Casi listo! Tu pedido está pre-registrado. Para finalizar y coordinar la entrega, por favor haz clic en este enlace para enviarnos tu confirmación directo a nuestro WhatsApp:\n\n👉 ${whatsappLink}\n\n¡Gracias por tu preferencia!`;
     }
     // Saludo inicial genérico
     else {
@@ -81,30 +81,6 @@ async function handleMessage(senderPsid: string, receivedMessage: any) {
   // Enviar el mensaje
   if (responseText) {
     await sendMessengerText(senderPsid, responseText);
-  }
-}
-
-// Enviar notificación al WhatsApp del dueño usando la Cloud API de WhatsApp
-async function sendWhatsAppNotification(messageText: string) {
-  try {
-    await axios.post(
-      `https://graph.facebook.com/v18.0/${WA_PHONE_NUMBER_ID}/messages`,
-      {
-        messaging_product: "whatsapp",
-        to: OWNER_WHATSAPP_NUMBER,
-        type: "text",
-        text: { body: messageText },
-      },
-      {
-        headers: {
-          "Authorization": `Bearer ${WA_ACCESS_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-    console.log("Notificación enviada a WhatsApp.");
-  } catch (error) {
-    console.error("Error enviando notificación a WhatsApp:", error);
   }
 }
 
@@ -133,13 +109,6 @@ app.post("/webhook", async (req, res) => {
             const senderId = webhookEvent.sender.id;
 
             if (webhookEvent.message && !webhookEvent.message.is_echo) {
-               // handleMessage currently uses sendMessengerText which assumes Messenger.
-               // For simplicity, we can pass a flag or just reuse it since the endpoint is the same
-               // but it's safer to duplicate or parameterize. Let's adapt handleMessage to support both.
-               // Since Instagram and Messenger use the same /me/messages endpoint,
-               // handleMessage will work as long as it calls the right endpoint.
-               // Wait, they actually DO use the same endpoint (`/me/messages?access_token=PAGE_ACCESS_TOKEN`),
-               // and the recipient ID works for both. So `sendMessengerText` will work for Instagram as well.
                await handleMessage(senderId, webhookEvent.message);
             }
           }
@@ -171,7 +140,6 @@ app.post("/webhook", async (req, res) => {
       }
 
       // Enviar 200 OK SOLO AL FINAL, después de procesar todas las promesas asíncronas
-      // De lo contrario, Firebase Function cerrará el proceso antes de que se envíen los mensajes
       res.status(200).send("EVENT_RECEIVED");
     } catch (error) {
       console.error("Error procesando webhook:", error);
