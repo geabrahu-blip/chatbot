@@ -55,43 +55,26 @@ async function handleMessage(senderPsid: string, receivedMessage: any) {
   if (receivedMessage.text) {
     const msg = receivedMessage.text.toLowerCase();
 
-    // Palabras clave principales
-    if (msg.includes("original") || msg.includes("originales")) {
-      responseText = "¡Hola! Sí, todos nuestros perfumes son 100% originales garantizados.";
+    // Opción 2: Catálogo
+    if (msg === "2" || msg.includes("catalogo") || msg.includes("catálogo") || msg.includes("precio")) {
+      responseText = "¡Claro que sí! Puedes ver nuestro catálogo completo con todos los perfumes disponibles y precios actualizados en nuestra página web aquí:\n👉 https://inventario-perfumes.web.app/catalogo";
     }
-    else if (msg.includes("ubicacion") || msg.includes("ubicación") || msg.includes("donde")) {
-      responseText = "Somos una tienda virtual. Hacemos entregas personales y envíos a todo el país. ¿Te gustaría ver nuestro catálogo o realizar un pedido?";
+    // Opción 3: Ubicación y Horarios
+    else if (msg === "3" || msg.includes("ubicacion") || msg.includes("ubicación") || msg.includes("donde")) {
+      responseText = "Puedes encontrarnos en la siguiente ubicación:\n📍 https://maps.app.goo.gl/ps4MgLXPyny8hUBH9, Cochabamba, Bolivia.\n\nNuestro horario de atención es solo de martes a domingo de 10:00 AM a 19:30 PM. ¡Te esperamos!";
     }
-    else if (msg.includes("catalogo") || msg.includes("catálogo") || msg.includes("precio")) {
-      responseText = "Puedes ver nuestro catálogo completo con todos los perfumes disponibles y precios actualizados en nuestra página web: [INSERTE AQUÍ SU ENLACE WEB]";
-    }
-
-    // Menú principal y opciones numéricas
+    // Opción 1: Hacer un pedido
     else if (msg === "1" || msg.includes("comprar") || msg.includes("pedido")) {
-      responseText = "¡Excelente! ¿Tu pedido es para entrega local o envío a otra ciudad?\n\nResponde 'LOCAL' para entrega aquí.\nResponde 'ENVIO' para mandar a otra ciudad.";
+      responseText = "¡Excelente! Para registrar tu pedido, envíame en un solo mensaje la palabra *Confirmar* seguida del perfume que deseas y la opción de entrega de tu preferencia:\n\n🔹 *Opción A:* Entregas en la Católica (Lunes a Viernes a las 14:15 PM).\n🔹 *Opción B:* Entregas en el Correo (Solo Sábados de 18:00 a 19:30 PM).\n\nEjemplo: Confirmar: Perfume Bleu de Chanel, Opción A y mi número es 77712345.";
     }
-
-    // Flujo Venta Local
-    else if (msg === "local") {
-      responseText = "Perfecto. Por favor, envíame en un solo mensaje tu pedido empezando con la palabra *Confirmar*. Ejemplo:\n\nConfirmar: Perfume XYZ, mañana a las 3pm.\n\n(Nota: El pago es a contra entrega).";
+    // Flujo Venta / Confirmar pedido
+    else if (msg.includes("confirmar")) {
+      responseText = "¡Pedido recibido! Tu solicitud ha sido agendada con éxito. El detalle de tu pedido ha sido enviado a nuestro equipo y te contactaremos para entregarlo. ¡Gracias por tu compra!";
+      await sendWhatsAppNotification(`📦 NUEVO PEDIDO REGISTRADO 📦\n\nDetalle del cliente:\n"${receivedMessage.text}"\n\nPerfil en Messenger (PSID): ${senderPsid}\n(Recuerda verificar la opción de entrega seleccionada por el cliente).`);
     }
-    else if (msg.includes("confirmar") && !msg.includes("local")) {
-      responseText = "¡Pedido recibido! Tu solicitud ha sido agendada. Nos pondremos en contacto contigo pronto para confirmar. ¡Gracias!";
-      await sendWhatsAppNotification(`📦 NUEVO PEDIDO LOCAL 📦\n\nMensaje del cliente:\n"${receivedMessage.text}"\n\nPor favor contáctalo por Messenger (PSID: ${senderPsid}) para confirmar.`);
-    }
-
-    // Flujo Venta por Envío
-    else if (msg === "envio" || msg === "envío") {
-      responseText = "Para envíos a otra ciudad, el pago es por adelantado. Una vez verifiquemos el pago, realizamos el envío.\n\nPor favor, envíame en un solo mensaje empezando con la palabra *Datos* y la siguiente información:\n- Carnet de Identidad\n- Nombre completo\n- Teléfono\n- Transportadora de preferencia\n- Ciudad a enviar\n\nEjemplo: Datos: CI 123, Juan Perez, 777123, Flota, La Paz";
-    }
-    else if (msg.includes("datos") && !msg.includes("envio") && !msg.includes("envío")) {
-      responseText = "¡Datos recibidos perfectamente! Por favor, envíanos el comprobante de pago por este medio. Una vez confirmado, te enviaremos la foto del comprobante de la transportadora a tu WhatsApp.";
-      await sendWhatsAppNotification(`🚚 NUEVO PEDIDO PARA ENVÍO 🚚\n\nDatos del cliente:\n"${receivedMessage.text}"\n\nPor favor revisa el comprobante de pago en Messenger (PSID: ${senderPsid}) y realiza el envío.`);
-    }
-
     // Saludo inicial genérico
     else {
-      responseText = `¡Hola! Bienvenido a nuestra perfumería.\n¿En qué te podemos ayudar?\n\nResponde con el número de la opción:\n1. Hacer un pedido\n2. Ver catálogo y precios\n3. Información sobre originalidad y ubicación`;
+      responseText = `¡Hola! Bienvenido a nuestra perfumería.\n¿En qué te podemos ayudar hoy?\n\nPor favor responde con el número de la opción que buscas:\n1. Hacer un pedido\n2. Ver catálogo y precios\n3. Ubicación y Horarios`;
     }
   }
 
