@@ -4,7 +4,7 @@
   "description": "Chatbot para perfumeria",
   "main": "lib/index.js",
   "engines": {
-    "node": "18"
+    "node": "20"
   },
   "scripts": {
     "build": "tsc",

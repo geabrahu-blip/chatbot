@@ -9,7 +9,7 @@ admin.initializeApp();
 const app = express();
 app.use(express.json());
 // Variables de entorno de Firebase o configurables manualmente
-const VERIFY_TOKEN = "mi_super_token_secreto_123";
+const VERIFY_TOKEN = process.env.VERIFY_TOKEN || "mi_super_token_secreto_123";
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN || "TU_PAGE_ACCESS_TOKEN";
 const WA_PHONE_NUMBER_ID = process.env.WA_PHONE_NUMBER_ID || "TU_WA_PHONE_NUMBER_ID";
 const WA_ACCESS_TOKEN = process.env.WA_ACCESS_TOKEN || "TU_WA_ACCESS_TOKEN";
@@ -65,17 +65,17 @@ async function handleMessage(senderPsid, receivedMessage) {
         }
         // Flujo Venta Local
         else if (msg === "local") {
-            responseText = "Perfecto. Por favor, indícame qué perfume deseas, el día y la hora que prefieres para la entrega.\n\n(Nota: El pago es a contra entrega).";
+            responseText = "Perfecto. Por favor, envíame en un solo mensaje tu pedido empezando con la palabra *Confirmar*. Ejemplo:\n\nConfirmar: Perfume XYZ, mañana a las 3pm.\n\n(Nota: El pago es a contra entrega).";
         }
-        else if (msg.includes("entrega") && msg.includes("hora") && !msg.includes("local")) {
-            responseText = "¡Pedido recibido! Tu solicitud de entrega local ha sido agendada. Nos pondremos en contacto contigo pronto para confirmar. ¡Gracias!";
+        else if (msg.includes("confirmar") && !msg.includes("local")) {
+            responseText = "¡Pedido recibido! Tu solicitud ha sido agendada. Nos pondremos en contacto contigo pronto para confirmar. ¡Gracias!";
             await sendWhatsAppNotification(`📦 NUEVO PEDIDO LOCAL 📦\n\nMensaje del cliente:\n"${receivedMessage.text}"\n\nPor favor contáctalo por Messenger (PSID: ${senderPsid}) para confirmar.`);
         }
         // Flujo Venta por Envío
         else if (msg === "envio" || msg === "envío") {
-            responseText = "Para envíos a otra ciudad, el pago es por adelantado. Una vez verifiquemos el pago, realizamos el envío.\n\nPor favor, envíame en un solo mensaje los siguientes datos:\n- Carnet de Identidad\n- Nombre completo\n- Teléfono\n- Transportadora de preferencia\n- Ciudad a enviar";
+            responseText = "Para envíos a otra ciudad, el pago es por adelantado. Una vez verifiquemos el pago, realizamos el envío.\n\nPor favor, envíame en un solo mensaje empezando con la palabra *Datos* y la siguiente información:\n- Carnet de Identidad\n- Nombre completo\n- Teléfono\n- Transportadora de preferencia\n- Ciudad a enviar\n\nEjemplo: Datos: CI 123, Juan Perez, 777123, Flota, La Paz";
         }
-        else if (msg.includes("ci") || msg.includes("carnet") || (msg.includes("nombre") && msg.includes("ciudad"))) {
+        else if (msg.includes("datos") && !msg.includes("envio") && !msg.includes("envío")) {
             responseText = "¡Datos recibidos perfectamente! Por favor, envíanos el comprobante de pago por este medio. Una vez confirmado, te enviaremos la foto del comprobante de la transportadora a tu WhatsApp.";
             await sendWhatsAppNotification(`🚚 NUEVO PEDIDO PARA ENVÍO 🚚\n\nDatos del cliente:\n"${receivedMessage.text}"\n\nPor favor revisa el comprobante de pago en Messenger (PSID: ${senderPsid}) y realiza el envío.`);
         }
@@ -118,18 +118,25 @@ async function sendPrivateReply(commentId, text) {
         console.error("Error enviando respuesta privada a comentario:", error);
     }
 }
-// Endpoint POST para recibir mensajes de Facebook
+// Endpoint POST para recibir mensajes de Facebook e Instagram
 app.post("/webhook", async (req, res) => {
     const body = req.body;
-    if (body.object === "page") {
+    if (body.object === "page" || body.object === "instagram") {
         try {
             for (const entry of body.entry) {
-                // 1. Manejo de mensajes de Messenger (Inbox)
+                // 1. Manejo de mensajes de Messenger (Inbox) e Instagram
                 if (entry.messaging) {
                     for (const webhookEvent of entry.messaging) {
-                        const senderPsid = webhookEvent.sender.id;
+                        const senderId = webhookEvent.sender.id;
                         if (webhookEvent.message && !webhookEvent.message.is_echo) {
-                            await handleMessage(senderPsid, webhookEvent.message);
+                            // handleMessage currently uses sendMessengerText which assumes Messenger.
+                            // For simplicity, we can pass a flag or just reuse it since the endpoint is the same
+                            // but it's safer to duplicate or parameterize. Let's adapt handleMessage to support both.
+                            // Since Instagram and Messenger use the same /me/messages endpoint,
+                            // handleMessage will work as long as it calls the right endpoint.
+                            // Wait, they actually DO use the same endpoint (`/me/messages?access_token=PAGE_ACCESS_TOKEN`),
+                            // and the recipient ID works for both. So `sendMessengerText` will work for Instagram as well.
+                            await handleMessage(senderId, webhookEvent.message);
                         }
                     }
                 }
@@ -138,14 +145,17 @@ app.post("/webhook", async (req, res) => {
                     for (const change of entry.changes) {
                         if (change.field === "feed" && change.value.item === "comment" && change.value.verb === "add") {
                             const commentId = change.value.comment_id;
-                            const messageText = change.value.message.toLowerCase();
-                            const fromId = change.value.from.id; // ID del usuario que comentó
-                            const pageId = entry.id; // ID de tu página
-                            // Evitar que el bot se responda a sí mismo
-                            if (fromId !== pageId) {
-                                if (messageText.includes("precio") || messageText.includes("info") || messageText.includes("disponible") || messageText.includes("catalogo")) {
-                                    const privateMsg = "¡Hola! Gracias por comentar. Para ver el catálogo completo, disponibilidad y hacer un pedido, por favor responde a este mensaje o escribe un número:\n1. Hacer pedido\n2. Ver catálogo";
-                                    await sendPrivateReply(commentId, privateMsg);
+                            const rawMessage = change.value.message;
+                            if (rawMessage) {
+                                const messageText = rawMessage.toLowerCase();
+                                const fromId = change.value.from.id; // ID del usuario que comentó
+                                const pageId = entry.id; // ID de tu página
+                                // Evitar que el bot se responda a sí mismo
+                                if (fromId !== pageId) {
+                                    if (messageText.includes("precio") || messageText.includes("info") || messageText.includes("disponible") || messageText.includes("catalogo")) {
+                                        const privateMsg = "¡Hola! Gracias por comentar. Para ver el catálogo completo, disponibilidad y hacer un pedido, por favor responde a este mensaje o escribe un número:\n1. Hacer pedido\n2. Ver catálogo";
+                                        await sendPrivateReply(commentId, privateMsg);
+                                    }
                                 }
                             }
                         }
