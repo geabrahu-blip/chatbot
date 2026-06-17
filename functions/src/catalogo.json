@@ -1,0 +1,34 @@
+[
+  {
+    "id": 1,
+    "nombre": "Bleu de Chanel",
+    "precio": 120,
+    "moneda": "USD",
+    "descripcion": "Fragancia amaderada aromática, elegante e intensa. Ideal para uso nocturno.",
+    "imagen_url": "https://inventario-perfumes.web.app/img/bleu-chanel.jpg"
+  },
+  {
+    "id": 2,
+    "nombre": "Dior Sauvage",
+    "precio": 110,
+    "moneda": "USD",
+    "descripcion": "Fragancia fresca y especiada con notas de bergamota y pimienta.",
+    "imagen_url": "https://inventario-perfumes.web.app/img/dior-sauvage.jpg"
+  },
+  {
+    "id": 3,
+    "nombre": "Carolina Herrera Good Girl",
+    "precio": 130,
+    "moneda": "USD",
+    "descripcion": "Perfume floral oriental para mujer, sensual y misterioso. Presentación en forma de zapato.",
+    "imagen_url": "https://inventario-perfumes.web.app/img/ch-good-girl.jpg"
+  },
+  {
+    "id": 4,
+    "nombre": "Acqua di Gio Profumo",
+    "precio": 95,
+    "moneda": "USD",
+    "descripcion": "Una versión más profunda e intensa del clásico Acqua di Gio. Notas marinas e incienso.",
+    "imagen_url": "https://inventario-perfumes.web.app/img/acqua-di-gio.jpg"
+  }
+]

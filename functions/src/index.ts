@@ -2,6 +2,8 @@ import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
 import * as express from "express";
 import axios from "axios";
+import { GoogleGenAI } from "@google/genai";
+import * as catalogo from "./catalogo.json";
 
 admin.initializeApp();
 
@@ -11,7 +13,12 @@ app.use(express.json());
 // Variables de entorno de Firebase o configurables manualmente
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || "mi_super_token_secreto_123";
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN || "TU_PAGE_ACCESS_TOKEN";
-const OWNER_WHATSAPP_NUMBER = process.env.OWNER_WHATSAPP_NUMBER || "TU_NUMERO_WHATSAPP_CON_CODIGO_PAIS";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
+const WA_PHONE_NUMBER_ID = process.env.WA_PHONE_NUMBER_ID || "TU_WA_PHONE_NUMBER_ID";
+const WA_ACCESS_TOKEN = process.env.WA_ACCESS_TOKEN || "TU_WA_ACCESS_TOKEN";
+
+// Inicializar Gemini
+const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
 // Endpoint de verificación (necesario para que Meta valide el Webhook)
 app.get("/webhook", (req, res) => {
@@ -46,41 +53,85 @@ async function sendMessengerText(senderPsid: string, text: string) {
   }
 }
 
-// Manejar los mensajes entrantes
+// Generar respuesta con Gemini
+async function generateGeminiResponse(userMessage: string): Promise<string> {
+  const systemInstruction = `Eres un asistente virtual muy formal, paciente y amable para una perfumería exclusiva.
+Tu objetivo principal es ayudar a los clientes a encontrar la fragancia ideal, responder a sus dudas y guiarlos hacia una compra.
+Siempre debes expresarte con mucho respeto y elegancia.
+Al final de cada uno de tus mensajes, debes incluir una pregunta orientada a cerrar la venta o a conocer mejor los gustos del cliente (por ejemplo: "¿Qué tipo de fragancia busca el día de hoy?", "¿Le gustaría ver detalles de algún otro perfume?", "¿Desea que le registre su pedido?").
+
+Aquí tienes el catálogo de perfumes disponibles en formato JSON:
+${JSON.stringify((catalogo as any).default || catalogo)}
+
+Si el cliente pregunta por el precio, detalles o imágenes de un perfume, busca en el catálogo y proporciona la información exacta, incluyendo la URL de la imagen del producto (imagen_url).
+
+Información importante:
+- Ubicación: Cochabamba, Bolivia (https://maps.app.goo.gl/ps4MgLXPyny8hUBH9).
+- Horario de atención: Martes a domingo de 10:00 AM a 19:30 PM.
+- Entregas:
+  * Opción A: Católica (Lunes a Viernes 14:15 PM)
+  * Opción B: Correo (Sábados 18:00 a 19:30 PM)
+  * Opción C: Recoger en sucursal.
+- Para confirmar un pedido, indícale al cliente que nos envíe un mensaje diciendo "Confirmar pedido" junto con los detalles de entrega y su número.`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: userMessage,
+      config: {
+        systemInstruction,
+      }
+    });
+
+    return response.text || "Lo siento, ha ocurrido un error al procesar su solicitud. ¿En qué más puedo ayudarle?";
+  } catch (error) {
+    console.error("Error con Gemini:", error);
+    return "Disculpe, en este momento no puedo procesar su solicitud. Por favor, intente nuevamente más tarde. ¿Hay algo más en lo que le pueda asistir?";
+  }
+}
+
+// Manejar los mensajes entrantes de Messenger/Instagram
 async function handleMessage(senderPsid: string, receivedMessage: any) {
   let responseText = "";
 
   if (receivedMessage.text) {
-    const msg = receivedMessage.text.toLowerCase();
-
-    // Opción 2: Catálogo
-    if (msg === "2" || msg.includes("catalogo") || msg.includes("catálogo") || msg.includes("precio")) {
-      responseText = "¡Claro que sí! Puedes ver nuestro catálogo completo con todos los perfumes disponibles y precios actualizados en nuestra página web aquí:\n👉 https://inventario-perfumes.web.app/catalogo";
-    }
-    // Opción 3: Ubicación y Horarios
-    else if (msg === "3" || msg.includes("ubicacion") || msg.includes("ubicación") || msg.includes("donde")) {
-      responseText = "Puedes encontrarnos en la siguiente ubicación:\n📍 https://maps.app.goo.gl/ps4MgLXPyny8hUBH9, Cochabamba, Bolivia.\n\nNuestro horario de atención es solo de martes a domingo de 10:00 AM a 19:30 PM. ¡Te esperamos!";
-    }
-    // Opción 1: Hacer un pedido
-    else if (msg === "1" || msg.includes("comprar") || msg.includes("pedido")) {
-      responseText = "¡Excelente! Para registrar tu pedido, envíame en un solo mensaje la palabra *Confirmar* seguida del perfume que deseas y la opción de entrega de tu preferencia:\n\n🔹 *Opción A:* Entregas en la Católica (Lunes a Viernes a las 14:15 PM).\n🔹 *Opción B:* Entregas en el Correo (Solo Sábados de 18:00 a 19:30 PM).\n🔹 *Opción C:* Recoger en sucursal.\n\nEjemplo: Confirmar: Perfume Bleu de Chanel, Opción C y mi número es 77712345.";
-    }
-    // Flujo Venta / Confirmar pedido - CON LINK DE WHATSAPP DIRECTO
-    else if (msg.includes("confirmar")) {
-      const encodedMessage = encodeURIComponent(`Hola, vengo de la página de Facebook. Este es mi pedido:\n\n${receivedMessage.text}`);
-      const whatsappLink = `https://wa.me/${OWNER_WHATSAPP_NUMBER}?text=${encodedMessage}`;
-
-      responseText = `¡Casi listo! Tu pedido está pre-registrado. Para finalizar y coordinar la entrega, por favor haz clic en este enlace para enviarnos tu confirmación directo a nuestro WhatsApp:\n\n👉 ${whatsappLink}\n\n¡Gracias por tu preferencia!`;
-    }
-    // Saludo inicial genérico
-    else {
-      responseText = `¡Hola! Bienvenido a nuestra perfumería.\n¿En qué te podemos ayudar hoy?\n\nPor favor responde con el número de la opción que buscas:\n1. Hacer un pedido\n2. Ver catálogo y precios\n3. Ubicación y Horarios`;
-    }
+    responseText = await generateGeminiResponse(receivedMessage.text);
   }
 
   // Enviar el mensaje
   if (responseText) {
     await sendMessengerText(senderPsid, responseText);
+  }
+}
+
+// Enviar un mensaje de texto por WhatsApp Oficial
+async function sendWhatsAppMessage(recipientPhone: string, text: string) {
+  try {
+    await axios.post(
+      `https://graph.facebook.com/v18.0/${WA_PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: recipientPhone,
+        type: "text",
+        text: { body: text },
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${WA_ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+  } catch (error: any) {
+    console.error("Error enviando mensaje por WhatsApp Oficial:", error?.response?.data || error);
+  }
+}
+
+// Manejar los mensajes entrantes de WhatsApp Oficial
+async function handleWhatsAppMessage(senderPhone: string, messageBody: string) {
+  const responseText = await generateGeminiResponse(messageBody);
+  if (responseText) {
+    await sendWhatsAppMessage(senderPhone, responseText);
   }
 }
 
@@ -96,7 +147,7 @@ async function sendPrivateReply(commentId: string, text: string) {
   }
 }
 
-// Endpoint POST para recibir mensajes de Facebook e Instagram
+// Endpoint POST para recibir mensajes de Facebook, Instagram y WhatsApp
 app.post("/webhook", async (req, res) => {
   const body = req.body;
 
@@ -129,7 +180,7 @@ app.post("/webhook", async (req, res) => {
                 // Evitar que el bot se responda a sí mismo
                 if (fromId !== pageId) {
                   if (messageText.includes("precio") || messageText.includes("info") || messageText.includes("disponible") || messageText.includes("catalogo")) {
-                    const privateMsg = "¡Hola! Gracias por comentar. Para ver el catálogo completo, disponibilidad y hacer un pedido, por favor responde a este mensaje o escribe un número:\n1. Hacer pedido\n2. Ver catálogo";
+                    const privateMsg = await generateGeminiResponse("Hola, me interesa saber más sobre sus productos. Respondí a un comentario.");
                     await sendPrivateReply(commentId, privateMsg);
                   }
                 }
@@ -142,7 +193,27 @@ app.post("/webhook", async (req, res) => {
       // Enviar 200 OK SOLO AL FINAL, después de procesar todas las promesas asíncronas
       res.status(200).send("EVENT_RECEIVED");
     } catch (error) {
-      console.error("Error procesando webhook:", error);
+      console.error("Error procesando webhook (Page/IG):", error);
+      res.status(500).send("INTERNAL_SERVER_ERROR");
+    }
+  } else if (body.object === "whatsapp_business_account") {
+    try {
+      for (const entry of body.entry) {
+        for (const change of entry.changes) {
+          if (change.value && change.value.messages) {
+            for (const msg of change.value.messages) {
+              if (msg.type === "text") {
+                const senderPhone = msg.from;
+                const messageBody = msg.text.body;
+                await handleWhatsAppMessage(senderPhone, messageBody);
+              }
+            }
+          }
+        }
+      }
+      res.status(200).send("EVENT_RECEIVED");
+    } catch (error) {
+      console.error("Error procesando webhook (WhatsApp):", error);
       res.status(500).send("INTERNAL_SERVER_ERROR");
     }
   } else {
